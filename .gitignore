@@ -1,0 +1,27 @@
+# Python虚拟环境
+.venv/
+
+# Python缓存
+__pycache__/
+*.pyc
+
+# 测试缓存
+.pytest_cache/
+
+# API密钥
+.env
+
+# 生成的字幕
+data/output/
+
+# 日志和缓存
+logs/
+cache/
+
+# 音视频文件
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.mp3
+*.wav
