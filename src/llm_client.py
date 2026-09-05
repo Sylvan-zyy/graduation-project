@@ -1,6 +1,7 @@
 import os
 
 from dotenv import load_dotenv
+from openai import OpenAI
 
 
 def load_deepseek_config() -> dict[str, str]:
@@ -22,3 +23,13 @@ def load_deepseek_config() -> dict[str, str]:
             "deepseek-v4-flash",
         ),
     }
+
+
+def create_deepseek_client() -> OpenAI:
+    """根据环境配置创建 DeepSeek 客户端。"""
+    config = load_deepseek_config()
+
+    return OpenAI(
+        api_key=config["api_key"],
+        base_url=config["base_url"],
+    )
