@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -6,6 +7,7 @@ from src.llm_client import (
     create_deepseek_client,
     load_deepseek_config,
     parse_correction_result,
+    request_correction,
     request_json_completion,
 )
 
@@ -82,3 +84,51 @@ def test_parse_correction_result():
     assert result["corrected_text"] == "今天天气很好"
     assert result["changed"] is True
     assert result["reason"] == "修正错别字"
+
+
+def test_request_correction_records_usage_and_time():
+    mock_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=(
+                        '{"corrected_text": "你好", '
+                        '"changed": false, '
+                        '"reason": "无需修改"}'
+                    )
+                )
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=20,
+            total_tokens=120,
+        ),
+    )
+
+    with (
+        patch(
+            "src.llm_client.request_json_completion",
+            return_value=mock_response,
+        ) as mock_request,
+        patch(
+            "src.llm_client.time.perf_counter",
+            side_effect=[10.0, 10.25],
+        ),
+    ):
+        result = request_correction(
+            system_prompt="系统提示",
+            user_prompt="用户提示",
+        )
+
+    mock_request.assert_called_once_with(
+        system_prompt="系统提示",
+        user_prompt="用户提示",
+    )
+    assert result["corrected_text"] == "你好"
+    assert result["changed"] is False
+    assert result["reason"] == "无需修改"
+    assert result["prompt_tokens"] == 100
+    assert result["completion_tokens"] == 20
+    assert result["total_tokens"] == 120
+    assert result["processing_time_seconds"] == 0.25

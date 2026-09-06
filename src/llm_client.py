@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -62,4 +63,30 @@ def parse_correction_result(content: str) -> dict[str, str | bool]:
         "corrected_text": data["corrected_text"],
         "changed": data["changed"],
         "reason": data["reason"],
+    }
+
+
+def request_correction(
+    system_prompt: str,
+    user_prompt: str,
+) -> dict[str, str | bool | int | float]:
+    """请求字幕校正，并返回校正结果与用量指标。"""
+    start_time = time.perf_counter()
+
+    response = request_json_completion(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    )
+
+    processing_time = time.perf_counter() - start_time
+    content = response.choices[0].message.content
+    correction = parse_correction_result(content)
+    usage = response.usage
+
+    return {
+        **correction,
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+        "processing_time_seconds": processing_time,
     }
