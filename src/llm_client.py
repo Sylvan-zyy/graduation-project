@@ -1,9 +1,7 @@
-import json
-import os
-import time
+import json,os,time
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APITimeoutError, OpenAI, OpenAIError
 
 
 def load_deepseek_config() -> dict[str, str]:
@@ -34,6 +32,7 @@ def create_deepseek_client() -> OpenAI:
     return OpenAI(
         api_key=config["api_key"],
         base_url=config["base_url"],
+        timeout=30.0,
     )
 
 
@@ -42,7 +41,8 @@ def request_json_completion(system_prompt: str, user_prompt: str):
     config = load_deepseek_config()
     client = create_deepseek_client()
 
-    return client.chat.completions.create(
+    try:
+        return client.chat.completions.create(
         model=config["model"],
         messages=[
             {"role": "system", "content": system_prompt},
@@ -53,11 +53,23 @@ def request_json_completion(system_prompt: str, user_prompt: str):
         temperature=0,
         extra_body={"thinking": {"type": "disabled"}},
     )
+    except APITimeoutError as exc:
+        raise RuntimeError("DeepSeek API 请求超时") from exc
+    except OpenAIError as exc:
+        raise RuntimeError("DeepSeek API 请求失败") from exc
+    
 
-
-def parse_correction_result(content: str) -> dict[str, str | bool]:
+def parse_correction_result(
+    content: str | None,
+) -> dict[str, str | bool]:
     """解析模型返回的字幕校正 JSON。"""
-    data = json.loads(content)
+    if not content or not content.strip():
+        raise ValueError("模型返回内容为空")
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError("模型返回的内容不是有效 JSON") from exc
 
     return {
         "corrected_text": data["corrected_text"],

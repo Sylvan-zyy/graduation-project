@@ -1,7 +1,8 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+from openai import APITimeoutError, OpenAIError
 
 from src.llm_client import (
     create_deepseek_client,
@@ -40,6 +41,7 @@ def test_create_deepseek_client(monkeypatch):
     mock_openai.assert_called_once_with(
         api_key="test-api-key",
         base_url="https://example.com",
+        timeout=30.0,
     )
     assert client is mock_openai.return_value
 
@@ -132,3 +134,65 @@ def test_request_correction_records_usage_and_time():
     assert result["completion_tokens"] == 20
     assert result["total_tokens"] == 120
     assert result["processing_time_seconds"] == 0.25
+
+
+def test_parse_correction_result_rejects_empty_content():
+    empty_values = (None, "", "   \n")
+
+    for content in empty_values:
+        with pytest.raises(ValueError, match="模型返回内容为空"):
+            parse_correction_result(content)
+
+
+def test_parse_correction_result_rejects_invalid_json():
+    with pytest.raises(
+        ValueError,
+        match="模型返回的内容不是有效 JSON",
+    ):
+        parse_correction_result("这不是 JSON")
+
+
+def test_request_json_completion_handles_timeout(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
+
+    timeout_error = APITimeoutError(
+    request=Mock()
+    )
+
+    with patch(
+        "src.llm_client.create_deepseek_client"
+    ) as mock_create_client:
+        mock_client = mock_create_client.return_value
+        mock_client.chat.completions.create.side_effect = timeout_error
+
+        with pytest.raises(
+            RuntimeError,
+            match="DeepSeek API 请求超时",
+        ):
+            request_json_completion(
+                system_prompt="请返回 JSON",
+                user_prompt="测试字幕",
+            )
+
+
+def test_request_json_completion_handles_api_error(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
+
+    api_error = OpenAIError("模拟 API 错误")
+
+    with patch(
+        "src.llm_client.create_deepseek_client"
+    ) as mock_create_client:
+        mock_client = mock_create_client.return_value
+        mock_client.chat.completions.create.side_effect = api_error
+
+        with pytest.raises(
+            RuntimeError,
+            match="DeepSeek API 请求失败",
+        ):
+            request_json_completion(
+                system_prompt="请返回 JSON",
+                user_prompt="测试字幕",
+            )            
