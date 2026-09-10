@@ -13,6 +13,7 @@ def correct_single_subtitle(
     current_index: int,
     window_size: int = 3,
     prompt_type: str = "normal",
+    cache_path: str | None = None,
 ) -> dict[str, str | bool | int | float]:
     """结合上下文校正指定位置的一条字幕。"""
     context = get_context(
@@ -29,6 +30,7 @@ def correct_single_subtitle(
     result = request_correction(
         system_prompt=SYSTEM_PROMPT,
         user_prompt=user_prompt,
+        cache_path=cache_path,
     )
 
     return {
@@ -42,6 +44,7 @@ def correct_all_subtitles(
     subtitles: list[Subtitle],
     window_size: int = 3,
     prompt_type: str = "normal",
+    cache_path: str | None = None,
 ) -> tuple[
     list[Subtitle],
     list[dict[str, str | bool | int | float]],
@@ -56,6 +59,7 @@ def correct_all_subtitles(
             current_index=current_index,
             window_size=window_size,
             prompt_type=prompt_type,
+            cache_path=cache_path,
         )
 
         corrected_text = result["corrected_text"]
@@ -73,6 +77,7 @@ def correct_srt_file(
     output_path: str,
     window_size: int = 3,
     prompt_type: str = "normal",
+    cache_path: str | None = None,
 ) -> list[dict[str, str | bool | int | float]]:
     """读取、校正并保存一个完整的 SRT 文件。"""
     subtitles = load_srt(input_path)
@@ -81,6 +86,7 @@ def correct_srt_file(
         subtitles=subtitles,
         window_size=window_size,
         prompt_type=prompt_type,
+        cache_path=cache_path,
     )
 
     save_srt(

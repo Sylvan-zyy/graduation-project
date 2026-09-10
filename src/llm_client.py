@@ -3,6 +3,8 @@ import json,os,time
 from dotenv import load_dotenv
 from openai import APITimeoutError, OpenAI, OpenAIError
 
+from .cache_manager import build_cache_key, load_cache, save_cache
+
 
 def load_deepseek_config() -> dict[str, str]:
     """从 .env 文件中读取 DeepSeek API 配置。"""
@@ -81,8 +83,29 @@ def parse_correction_result(
 def request_correction(
     system_prompt: str,
     user_prompt: str,
+    cache_path: str | None = None,
 ) -> dict[str, str | bool | int | float]:
     """请求字幕校正，并返回校正结果与用量指标。"""
+    cache: dict[str, dict] = {}
+    cache_key = None
+
+    if cache_path is not None:
+        config = load_deepseek_config()
+        cache = load_cache(cache_path)
+        cache_key = build_cache_key(
+            model=config["model"],
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return {
+                **cached_result,
+                "from_cache": True,
+            }
+
+        
     start_time = time.perf_counter()
 
     response = request_json_completion(
@@ -95,10 +118,20 @@ def request_correction(
     correction = parse_correction_result(content)
     usage = response.usage
 
-    return {
-        **correction,
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-        "processing_time_seconds": processing_time,
-    }
+    result = {
+    **correction,
+    "prompt_tokens": usage.prompt_tokens,
+    "completion_tokens": usage.completion_tokens,
+    "total_tokens": usage.total_tokens,
+    "processing_time_seconds": processing_time,
+    "from_cache": False,  # False表示来自 API，True表示来自缓存
+}
+
+    if cache_path is not None and cache_key is not None:
+        cache[cache_key] = result
+        save_cache(
+            cache=cache,
+            file_path=cache_path,
+    )
+
+    return result

@@ -53,10 +53,12 @@ def test_correct_single_subtitle():
             current_index=1,
             window_size=1,
             prompt_type="minimal",
+            cache_path="cache/test.json",
         )
 
     request_arguments = mock_request.call_args.kwargs
 
+    assert request_arguments["cache_path"] == "cache/test.json"
     assert request_arguments["system_prompt"] == SYSTEM_PROMPT
     assert "今天天气不错" in request_arguments["user_prompt"]
     assert "我们出去散不" in request_arguments["user_prompt"]
@@ -118,9 +120,15 @@ def test_correct_all_subtitles():
             subtitles=subtitles,
             window_size=1,
             prompt_type="minimal",
+            cache_path="cache/test.json",
         )
 
     assert mock_correct.call_count == 2
+
+    # call_args_list是Mock对象的属性,记录了该模拟对象被调用的所有历史
+    for mock_call in mock_correct.call_args_list:
+        assert mock_call.kwargs["cache_path"] == "cache/test.json"
+
     assert subtitles[0].content == "第一句原文"
     assert subtitles[1].content == "第二句原闻"
     assert corrected_subtitles[0].content == "第一句原文"
@@ -193,6 +201,7 @@ def test_correct_srt_file():
             output_path="output.srt",
             window_size=1,
             prompt_type="minimal",
+            cache_path="cache/test.json",
         )
 
     mock_load.assert_called_once_with("input.srt")
@@ -200,6 +209,7 @@ def test_correct_srt_file():
         subtitles=original_subtitles,
         window_size=1,
         prompt_type="minimal",
+        cache_path="cache/test.json",
     )
     mock_save.assert_called_once_with(
         subtitles=corrected_subtitles,

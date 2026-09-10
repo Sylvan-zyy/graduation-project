@@ -13,6 +13,7 @@ from src.llm_client import (
 )
 
 def test_load_deepseek_config(monkeypatch):
+    """测试 load_deepseek_config 能正确读取环境变量"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://example.com")
     monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
@@ -25,6 +26,7 @@ def test_load_deepseek_config(monkeypatch):
 
 
 def test_missing_api_key_raises_error(monkeypatch):
+    """测试 load_deepseek_config 在缺少 API Key 时抛出 ValueError"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "")
 
     with pytest.raises(ValueError, match="未找到 DEEPSEEK_API_KEY"):
@@ -32,6 +34,7 @@ def test_missing_api_key_raises_error(monkeypatch):
 
 
 def test_create_deepseek_client(monkeypatch):
+    """测试 create_deepseek_client 能正确创建 DeepSeek 客户端"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://example.com")
 
@@ -47,6 +50,7 @@ def test_create_deepseek_client(monkeypatch):
 
 
 def test_request_json_completion(monkeypatch):
+    """测试 request_json_completion 能正确调用 DeepSeek API"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
     monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
 
@@ -75,6 +79,7 @@ def test_request_json_completion(monkeypatch):
 
 
 def test_parse_correction_result():
+    """测试 parse_correction_result 能正确解析 JSON 字符串"""
     content = (
         '{"corrected_text": "今天天气很好", '
         '"changed": true, '
@@ -89,6 +94,7 @@ def test_parse_correction_result():
 
 
 def test_request_correction_records_usage_and_time():
+    """测试 request_correction 能正确记录用量和处理时间"""
     mock_response = SimpleNamespace(
         choices=[
             SimpleNamespace(
@@ -137,6 +143,7 @@ def test_request_correction_records_usage_and_time():
 
 
 def test_parse_correction_result_rejects_empty_content():
+    """测试 parse_correction_result 遇到空内容时抛出 ValueError"""
     empty_values = (None, "", "   \n")
 
     for content in empty_values:
@@ -145,6 +152,7 @@ def test_parse_correction_result_rejects_empty_content():
 
 
 def test_parse_correction_result_rejects_invalid_json():
+    """测试 parse_correction_result遇到无效JSON时抛出 ValueError"""
     with pytest.raises(
         ValueError,
         match="模型返回的内容不是有效 JSON",
@@ -153,6 +161,7 @@ def test_parse_correction_result_rejects_invalid_json():
 
 
 def test_request_json_completion_handles_timeout(monkeypatch):
+    """测试 request_json_completion 在请求超时时抛出 RuntimeError"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
     monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
 
@@ -177,6 +186,7 @@ def test_request_json_completion_handles_timeout(monkeypatch):
 
 
 def test_request_json_completion_handles_api_error(monkeypatch):
+    """测试 request_json_completion 在 API 错误时抛出 RuntimeError"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
     monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
 
@@ -196,3 +206,108 @@ def test_request_json_completion_handles_api_error(monkeypatch):
                 system_prompt="请返回 JSON",
                 user_prompt="测试字幕",
             )            
+
+
+def test_request_correction_uses_cached_result(monkeypatch):
+    """测试request_correction在缓存命中时，直接返回缓存结果"""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
+
+    cached_result = {
+        "corrected_text": "缓存中的字幕",
+        "changed": True,
+        "reason": "缓存结果",
+        "prompt_tokens": 80,
+        "completion_tokens": 20,
+        "total_tokens": 100,
+        "processing_time_seconds": 0.4,
+        "from_cache": False,
+    }
+
+    with (
+        patch(
+            "src.llm_client.build_cache_key",
+            # 当这个函数被调用时，返回"test-cache-key"这个字符串
+            return_value="test-cache-key",
+        ),
+        patch(
+            "src.llm_client.load_cache",
+            # 当这个函数被调用时，永远返回这个字典
+            return_value={"test-cache-key": cached_result},
+        ),
+        patch(
+            "src.llm_client.request_json_completion"
+        ) as mock_request,
+    ):
+        result = request_correction(
+            system_prompt="系统提示",
+            user_prompt="用户提示",
+            cache_path="cache/test.json",
+        )
+
+    mock_request.assert_not_called()
+    assert result["corrected_text"] == "缓存中的字幕"
+    assert result["from_cache"] is True          
+
+
+def test_request_correction_saves_new_result(monkeypatch):
+    """测试request_correction在缓存未命中时，调用API并保存新结果"""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-api-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
+
+    # SimpleNamespace创建一个简单的对象，让关键字参数变成属性
+    mock_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=(
+                        '{"corrected_text": "新校正字幕", '
+                        '"changed": true, '
+                        '"reason": "修正错别字"}'
+                    )
+                )
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=90,
+            completion_tokens=20,
+            total_tokens=110,
+        ),
+    )
+
+    with (
+        patch(
+            "src.llm_client.build_cache_key",
+            return_value="test-cache-key",
+        ),
+        patch(
+            "src.llm_client.load_cache",
+            return_value={},
+        ),
+        patch(
+            "src.llm_client.save_cache"
+        ) as mock_save,
+        patch(
+            "src.llm_client.request_json_completion",
+            return_value=mock_response,
+        ) as mock_request,
+        patch(
+            "src.llm_client.time.perf_counter",
+            side_effect=[10.0, 10.5],
+        ),
+    ):
+        result = request_correction(
+            system_prompt="系统提示",
+            user_prompt="用户提示",
+            cache_path="cache/test.json",
+        )
+
+    mock_request.assert_called_once()
+    mock_save.assert_called_once_with(
+        cache={"test-cache-key": result},
+        file_path="cache/test.json",
+    )
+    assert result["from_cache"] is False
+    assert result["corrected_text"] == "新校正字幕"
+    assert result["total_tokens"] == 110
+    assert result["processing_time_seconds"] == 0.5  
