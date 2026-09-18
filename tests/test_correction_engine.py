@@ -159,6 +159,71 @@ def test_correct_all_subtitles():
     assert results == mock_results
 
 
+def test_correct_all_subtitles_resumes_from_log():
+    """确认第一条字幕复用日志结果，只有第二条字幕进入模型校正流程"""
+    subtitles = [
+        Subtitle(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=2),
+            content="第一句原闻",  # 已校正过
+        ),
+        Subtitle(
+            index=2,
+            start=timedelta(seconds=2),
+            end=timedelta(seconds=4),
+            content="第二句原闻",  # 未校正过
+        ),
+    ]
+
+    completed_result = {
+        "subtitle_index": 1,
+        "corrected_text": "第一句原文",  # 模拟日志中已有的结果
+    }
+    new_result = {
+        "subtitle_index": 2,
+        "corrected_text": "第二句原文",  # 模拟 API 新返回的结果
+    }
+
+    with (
+        patch(
+            "src.correction_engine.load_completed_results",
+            return_value={1: completed_result},
+        ) as mock_load,  # 模拟已有字幕 1 的结果
+        patch(
+            "src.correction_engine.correct_single_subtitle",
+            return_value=new_result,
+        ) as mock_correct,  # 模拟 API 返回字幕 2 的结果
+        patch(
+            "src.correction_engine.append_result_log",
+        ) as mock_log,  # 验证日志写入
+    ):
+        corrected_subtitles, results = correct_all_subtitles(
+            subtitles=subtitles,
+            window_size=1,
+            prompt_type="minimal",
+            cache_path="cache/test.json",
+            log_path="logs/test.jsonl",
+        )
+
+    mock_load.assert_called_once_with("logs/test.jsonl")
+    mock_correct.assert_called_once_with(
+        subtitles=subtitles,
+        current_index=1,
+        window_size=1,
+        prompt_type="minimal",
+        cache_path="cache/test.json",
+    )
+    mock_log.assert_called_once_with(
+        result=new_result,
+        file_path="logs/test.jsonl",
+    )
+
+    assert corrected_subtitles[0].content == "第一句原文"
+    assert corrected_subtitles[1].content == "第二句原文"
+    assert results == [completed_result, new_result]
+
+
 def test_correct_all_subtitles_with_empty_list():
     with patch(
         "src.correction_engine.correct_single_subtitle"
