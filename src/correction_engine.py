@@ -5,6 +5,7 @@ from srt import Subtitle
 from .context_manager import get_context
 from .llm_client import request_correction
 from .prompt_builder import SYSTEM_PROMPT, build_user_prompt
+from .result_logger import append_result_log
 from .subtitle_io import load_srt, save_srt
 
 
@@ -15,7 +16,7 @@ def correct_single_subtitle(
     prompt_type: str = "normal",
     cache_path: str | None = None,
 ) -> dict[str, str | bool | int | float]:
-    """结合上下文校正指定位置的一条字幕。"""
+    """结合上下文校正单条字幕，并返回校正结果字典"""
     context = get_context(
         subtitles=subtitles,
         current_index=current_index,
@@ -34,10 +35,12 @@ def correct_single_subtitle(
     )
 
     return {
-        "subtitle_index": subtitles[current_index].index,
-        "original_text": context["current"],
-        **result,
-    }
+    "subtitle_index": subtitles[current_index].index,
+    "original_text": context["current"],
+    "window_size": window_size,
+    "prompt_type": prompt_type,
+    **result,
+}
 
 
 def correct_all_subtitles(
@@ -45,11 +48,12 @@ def correct_all_subtitles(
     window_size: int = 3,
     prompt_type: str = "normal",
     cache_path: str | None = None,
+    log_path: str | None = None,
 ) -> tuple[
     list[Subtitle],
     list[dict[str, str | bool | int | float]],
 ]:
-    """逐条校正字幕，并返回字幕副本和每条校正记录。"""
+    """结合上下文校正所有字幕，并返回校正后的字幕列表和结果列表"""
     corrected_subtitles = deepcopy(subtitles)
     results = []
 
@@ -68,6 +72,11 @@ def correct_all_subtitles(
 
         corrected_subtitles[current_index].content = corrected_text
         results.append(result)
+        if log_path is not None:
+            append_result_log(
+                result=result,
+                file_path=log_path,
+            )
 
     return corrected_subtitles, results
 
@@ -78,6 +87,7 @@ def correct_srt_file(
     window_size: int = 3,
     prompt_type: str = "normal",
     cache_path: str | None = None,
+    log_path: str | None = None,
 ) -> list[dict[str, str | bool | int | float]]:
     """读取、校正并保存一个完整的 SRT 文件。"""
     subtitles = load_srt(input_path)
@@ -87,6 +97,7 @@ def correct_srt_file(
         window_size=window_size,
         prompt_type=prompt_type,
         cache_path=cache_path,
+        log_path=log_path,
     )
 
     save_srt(

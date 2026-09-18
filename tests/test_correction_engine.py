@@ -13,6 +13,7 @@ from src.prompt_builder import SYSTEM_PROMPT
 
 
 def test_correct_single_subtitle():
+    """测试 correct_single_subtitle 函数的基本功能"""
     subtitles = [
         Subtitle(
             index=1,
@@ -70,8 +71,12 @@ def test_correct_single_subtitle():
     assert result["changed"] is True
     assert result["total_tokens"] == 120
 
+    assert result["window_size"] == 1
+    assert result["prompt_type"] == "minimal"
+
 
 def test_correct_all_subtitles():
+    """测试 correct_all_subtitles 函数在正常情况下的行为"""
     subtitles = [
         Subtitle(
             index=1,
@@ -112,18 +117,35 @@ def test_correct_all_subtitles():
         },
     ]
 
-    with patch(
-        "src.correction_engine.correct_single_subtitle",
-        side_effect=mock_results,
-    ) as mock_correct:
+    with (
+        patch(
+            "src.correction_engine.correct_single_subtitle",
+            side_effect=mock_results,
+        ) as mock_correct,
+        patch(
+            "src.correction_engine.append_result_log"
+        ) as mock_log,
+    ):
         corrected_subtitles, results = correct_all_subtitles(
             subtitles=subtitles,
             window_size=1,
             prompt_type="minimal",
             cache_path="cache/test.json",
+            log_path="logs/test.jsonl",
         )
 
     assert mock_correct.call_count == 2
+    assert mock_log.call_count == 2
+    # assert_any_call检查模拟对象是否至少被调用过一次且参数匹配
+    mock_log.assert_any_call(
+        result=mock_results[0],
+        file_path="logs/test.jsonl",
+    )
+    mock_log.assert_any_call(
+        result=mock_results[1],
+        file_path="logs/test.jsonl",
+    )
+    
 
     # call_args_list是Mock对象的属性,记录了该模拟对象被调用的所有历史
     for mock_call in mock_correct.call_args_list:
@@ -202,16 +224,19 @@ def test_correct_srt_file():
             window_size=1,
             prompt_type="minimal",
             cache_path="cache/test.json",
+            log_path="logs/test.jsonl",
         )
 
     mock_load.assert_called_once_with("input.srt")
+    # assert_called_once_with检查模拟对象是否只被调用过一次且参数匹配
     mock_correct_all.assert_called_once_with(
         subtitles=original_subtitles,
         window_size=1,
         prompt_type="minimal",
         cache_path="cache/test.json",
+        log_path="logs/test.jsonl",
     )
-    mock_save.assert_called_once_with(
+    mock_save.assert_called_once_with(  
         subtitles=corrected_subtitles,
         file_path="output.srt",
     )
