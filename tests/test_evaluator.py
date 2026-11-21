@@ -1,7 +1,10 @@
 import pytest
 
-from src.evaluator import calculate_cer, calculate_corpus_cer
-
+from src.evaluator import (
+    calculate_cer,
+    calculate_corpus_cer,
+    calculate_correct_modification_rate,
+)
 
 def test_calculate_cer_with_identical_text():
     result = calculate_cer(
@@ -113,3 +116,44 @@ def test_calculate_corpus_cer_preserves_subtitle_boundaries():
     )
 
     assert result == pytest.approx(1.0)
+
+# 测试正确修改率计算只统计改进
+def test_calculate_correct_modification_rate_counts_only_improvements():
+    from src.evaluator import calculate_correct_modification_rate
+
+    result = calculate_correct_modification_rate(
+        reference_texts=["今天天气好", "我们去看戏", "你好", "早上好"],
+        original_texts=["今夭天汽好", "我们去看细", "你好", "早上号"],
+        corrected_texts=["今天天汽好", "我们去看系", "你号", "早上号"],
+    )
+
+    assert result == pytest.approx(1 / 3)
+
+
+def test_calculate_correct_modification_rate_returns_none_without_changes():
+    result = calculate_correct_modification_rate(
+        reference_texts=["你好"],
+        original_texts=["你号"],
+        corrected_texts=["你号"],
+    )
+
+    assert result is None  # 返回None表示没有修改的字幕条数
+
+
+def test_calculate_correct_modification_rate_returns_zero_without_improvements():
+    result = calculate_correct_modification_rate(
+        reference_texts=["你好"],
+        original_texts=["你好"],
+        corrected_texts=["你号"],
+    )
+
+    assert result == 0.0  # 返回0.0表示有修改的字幕条数，但没有改进的字幕条数
+
+# 测试确保校正结果少了一条时会报错，避免 zip() 悄悄跳过配对不上的字幕
+def test_calculate_correct_modification_rate_rejects_mismatched_lengths():
+    with pytest.raises(ValueError, match="条数必须一致"):
+        calculate_correct_modification_rate(
+            reference_texts=["你好", "再见"],
+            original_texts=["你号", "再见"],
+            corrected_texts=["你好"],
+        )

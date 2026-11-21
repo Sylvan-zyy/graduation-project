@@ -115,3 +115,47 @@ def calculate_corpus_cer(
         raise ValueError("参考字幕的总字符数不能为零")  # 作用在字符串上，加的是当前这一轮字幕的字符数
 
     return total_edit_distance / total_reference_chars  # 循环结束后才做一次除法
+
+
+# 计算正确修改率
+# 正确率 = 校正后编辑距离严格变小的字幕条数 / 校正文本与原始文本不同的字幕条数
+# 正确率 = 已修改字幕中更接近参考的比例 = 改进的字幕数 / 修改的字幕数
+def calculate_correct_modification_rate(
+    reference_texts: list[str],  # 人工核对过的参考字幕
+    original_texts: list[str],  # 原始字幕
+    corrected_texts: list[str],  # 大模型校正后的字幕
+) -> float | None:
+    """返回已修改字幕中更接近参考的比例。"""
+    subtitle_lists = (reference_texts, original_texts, corrected_texts)
+    if not all(isinstance(texts, list) for texts in subtitle_lists):
+        raise TypeError("参考、原始和校正字幕都必须是列表")
+
+    if not (len(reference_texts) == len(original_texts) == len(corrected_texts)):
+        raise ValueError("参考、原始和校正字幕的条数必须一致")
+
+    # 统计已修改字幕数和改进的字幕数
+    modified_count = 0
+    improved_count = 0  # 只有校正后的距离严格小于校正前的距离，count才加1
+
+    # zip()每次取出同一位置的三个元素，再分别赋给三个变量
+    # 带 s 的变量是整个列表，循环里的三个变量是本轮处理的字幕文本
+    for reference, original, corrected in zip(
+        reference_texts, original_texts, corrected_texts
+    ):
+        if not all(isinstance(text, str) for text in (reference, original, corrected)):
+            raise TypeError("每条字幕都必须是字符串")
+
+        if corrected == original:
+            continue  # 比较校正前后的文本，如果两者相同，跳过本轮剩余代码，直接处理下一条字幕
+
+        modified_count += 1
+        original_distance = _calculate_edit_distance(reference, original)
+        corrected_distance = _calculate_edit_distance(reference, corrected)
+
+        if corrected_distance < original_distance:
+            improved_count += 1
+
+    if modified_count == 0:
+        return None
+
+    return improved_count / modified_count
