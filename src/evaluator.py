@@ -2,20 +2,18 @@
 """编辑距离：参考文本前 i 个字符 → 预测文本前 j 个字符，最少需要多少插入、删除、替换操作"""
 """动态规划表：二维表，记录参考前 i 个字符 → 预测前 j 个字符的最小编辑距离"""
 
-
-def calculate_cer(
+#  私有辅助函数（下划线开头）
+def _calculate_edit_distance(
     reference_text: str,
     predicted_text: str,
-) -> float:
-    """计算预测文本相对于参考文本的字符错误率。"""
+) -> int:
+    """计算两个字符串之间的字符编辑距离。"""
     if not isinstance(reference_text, str):
         raise TypeError("reference_text 必须是字符串")
 
     if not isinstance(predicted_text, str):
         raise TypeError("predicted_text 必须是字符串")
 
-    if reference_text == "":
-        raise ValueError("reference_text 不能为空")
 
     # 编辑距离算法的核心，表示参考文本为空字符串时，变成预测文本需要多少次操作
     # 初始化动态规划表
@@ -65,4 +63,55 @@ def calculate_cer(
     # 动态规划表的最后一个元素 = 编辑距离
     # previous_row[-1] 是最后一行的最后一个元素，列表从右往左取第一个元素
     edit_distance = previous_row[-1]
-    return edit_distance / len(reference_text)  # CER = 编辑距离 / 参考文本长度
+    return edit_distance  # 返回编辑距离
+
+
+def calculate_cer(
+    reference_text: str,
+    predicted_text: str,
+) -> float:
+    """计算单条字幕的字符错误率。"""
+    edit_distance = _calculate_edit_distance(
+        reference_text,
+        predicted_text,
+    )
+
+    if reference_text == "":
+        raise ValueError("reference_text 不能为空")
+
+    return edit_distance / len(reference_text)
+
+
+def calculate_corpus_cer(
+    reference_texts: list[str],
+    predicted_texts: list[str],
+) -> float:
+    """按位置配对，计算总编辑距离除以总参考字符数。"""
+    if not isinstance(reference_texts, list):
+        raise TypeError("reference_texts 必须是列表")
+
+    if not isinstance(predicted_texts, list):
+        raise TypeError("predicted_texts 必须是列表")
+
+    if len(reference_texts) != len(predicted_texts):
+        raise ValueError("参考字幕与预测字幕的条数必须一致")
+
+    total_edit_distance = 0
+    total_reference_chars = 0
+
+# reference_texts是整个参考字幕列表，reference_text是其中的一条字幕，predicted同理
+# zip()每轮取一对同位置的元素，再把这一对分别赋给两个变量
+    for reference_text, predicted_text in zip(
+        reference_texts,
+        predicted_texts,
+    ):
+        total_edit_distance += _calculate_edit_distance(
+            reference_text,
+            predicted_text,
+        )
+        total_reference_chars += len(reference_text)
+
+    if total_reference_chars == 0:
+        raise ValueError("参考字幕的总字符数不能为零")  # 作用在字符串上，加的是当前这一轮字幕的字符数
+
+    return total_edit_distance / total_reference_chars  # 循环结束后才做一次除法
