@@ -4,6 +4,7 @@ from src.evaluator import (
     calculate_cer,
     calculate_corpus_cer,
     calculate_correct_modification_rate,
+    calculate_overcorrection_rate,
 )
 
 def test_calculate_cer_with_identical_text():
@@ -157,3 +158,35 @@ def test_calculate_correct_modification_rate_rejects_mismatched_lengths():
             original_texts=["你号", "再见"],
             corrected_texts=["你好"],
         )
+
+
+def test_calculate_overcorrection_rate_counts_only_originally_correct_subtitles():
+    result = calculate_overcorrection_rate(
+        reference_texts=["你好", "再见", "早上好", "天气好"],
+        original_texts=["你好", "再见", "早上好", "天气号"],
+        corrected_texts=["你号", "再见", "早上好", "天汽号"],
+    )
+
+    assert result == pytest.approx(1 / 3)
+
+
+# 测试过度修改率计算只统计原本正确的字幕条数
+def test_calculate_overcorrection_rate_returns_none_without_correct_originals():
+    result = calculate_overcorrection_rate(
+        reference_texts=["你好"],
+        original_texts=["你号"],
+        corrected_texts=["你好"],
+    )
+
+    assert result is None  # None表示没有原本正确的字幕条数
+
+
+# 测试过度修改率计算在原本正确的字幕条数中没有被改错的情况
+def test_calculate_overcorrection_rate_returns_zero_when_correct_text_is_preserved():
+    result = calculate_overcorrection_rate(
+        reference_texts=["你好", "再见"],
+        original_texts=["你好", "再件"],
+        corrected_texts=["你好", "再见"],
+    )
+
+    assert result == 0.0  # 0.0表示有原本正确的字幕条数，但没有被改错的字幕条数

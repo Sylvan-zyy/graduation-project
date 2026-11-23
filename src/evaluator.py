@@ -159,3 +159,41 @@ def calculate_correct_modification_rate(
         return None
 
     return improved_count / modified_count
+
+
+# 计算过度修改率
+# 先找出原本就和人工参考字幕完全一致的条目，再看其中有多少条被模型改得和参考字幕不一致
+def calculate_overcorrection_rate(
+    reference_texts: list[str],
+    original_texts: list[str],
+    corrected_texts: list[str],
+) -> float | None:
+    """返回原本正确的字幕中被改错的比例。"""
+    subtitle_lists = (reference_texts, original_texts, corrected_texts)
+    if not all(isinstance(texts, list) for texts in subtitle_lists):
+        raise TypeError("参考、原始和校正字幕都必须是列表")
+
+    if not (len(reference_texts) == len(original_texts) == len(corrected_texts)):
+        raise ValueError("参考、原始和校正字幕的条数必须一致")
+
+    originally_correct_count = 0
+    overcorrected_count = 0
+
+    for reference, original, corrected in zip(
+        reference_texts, original_texts, corrected_texts
+    ):
+        if not all(isinstance(text, str) for text in (reference, original, corrected)):
+            raise TypeError("每条字幕都必须是字符串")
+
+        if original != reference:  # 如果原始文本和参考文本不同，说明它原本就有错，此时进入下一轮循环
+            continue
+
+        originally_correct_count += 1
+        if corrected != reference:  # 第二个if只在原本正确的字幕上执行，此时如果校正后的字幕和参考字幕不同，说明它被改错了
+            overcorrected_count += 1
+
+    if originally_correct_count == 0:
+        return None
+
+    # 过度修改率 = 原本正确的字幕中被改错的比例 = 改错的字幕数 / 原本正确的字幕数
+    return overcorrected_count / originally_correct_count
