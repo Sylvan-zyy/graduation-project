@@ -197,3 +197,46 @@ def calculate_overcorrection_rate(
 
     # 过度修改率 = 原本正确的字幕中被改错的比例 = 改错的字幕数 / 原本正确的字幕数
     return overcorrected_count / originally_correct_count
+
+
+# 接收本轮 correct_srt_file() 返回的结果列表，先跳过缓存和日志记录，再累加新请求的用量。
+def summarize_api_usage(
+    results: list[dict[str, str | bool | int | float]],
+) -> dict[str, int | float]:
+    """汇总本轮校正结果中新 API 请求的用量与耗时。"""
+    token_totals = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    api_result_count = 0
+    api_processing_time_seconds = 0.0
+
+    for result in results:
+        if result.get("from_log") or result.get("from_cache"):  # or 从左到右判断
+            continue
+
+        for field in token_totals:
+            tokens = result.get(field)
+            if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens < 0:
+                raise ValueError(f"{field} 必须是非负整数")
+            token_totals[field] += tokens
+
+        seconds = result.get("processing_time_seconds")  # 校验处理耗时，再把请求次数加1
+        if (
+            isinstance(seconds, bool)
+            or not isinstance(seconds, (int, float))
+            or seconds < 0
+        ):
+            raise ValueError("processing_time_seconds 必须是非负数")
+
+        # 结果通过三项 Token 的校验和累加，再通过耗时校验后，就会把它计为本轮的一次 API 请求。
+        # 来自缓存或日志的结果会提前执行 continue
+        api_result_count += 1  # 在外层循环内、内层循环外
+        api_processing_time_seconds += seconds
+
+    return {
+        "api_result_count": api_result_count,
+        **token_totals,
+        "api_processing_time_seconds": api_processing_time_seconds,
+    }

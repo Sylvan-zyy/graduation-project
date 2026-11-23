@@ -118,7 +118,7 @@ def test_correct_all_subtitles():
     ]
 
     with (
-        patch(
+        patch(  # patch在 with 块内把目标临时替换成 mock 并预设返回值
             "src.correction_engine.correct_single_subtitle",
             side_effect=mock_results,
         ) as mock_correct,
@@ -221,7 +221,10 @@ def test_correct_all_subtitles_resumes_from_log():
 
     assert corrected_subtitles[0].content == "第一句原文"
     assert corrected_subtitles[1].content == "第二句原文"
-    assert results == [completed_result, new_result]
+    assert results == [
+        {**completed_result, "from_log": True},
+        new_result,
+    ]
 
 
 def test_correct_all_subtitles_with_empty_list():

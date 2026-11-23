@@ -73,7 +73,10 @@ def correct_all_subtitles(
 
         # 断点续传,跳过已经校正过的字幕，只处理新的字幕
         if subtitle_index in completed_results:
-            result = completed_results[subtitle_index]
+            result = {
+                **completed_results[subtitle_index],  # **会把历史记录里的字段复制到一个新字典，然后给本轮返回的结果加上标记
+                "from_log": True,
+            }
         else:
             result = correct_single_subtitle(
                 subtitles=subtitles,

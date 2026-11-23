@@ -5,6 +5,7 @@ from src.evaluator import (
     calculate_corpus_cer,
     calculate_correct_modification_rate,
     calculate_overcorrection_rate,
+    summarize_api_usage,
 )
 
 def test_calculate_cer_with_identical_text():
@@ -190,3 +191,65 @@ def test_calculate_overcorrection_rate_returns_zero_when_correct_text_is_preserv
     )
 
     assert result == 0.0  # 0.0表示有原本正确的字幕条数，但没有被改错的字幕条数
+
+
+# 只累加本轮新API请求的Token和耗时
+# 只有日志里没有已完成结果，而且请求缓存也没命中时，校正流程才需要发起新的 API 请求
+def test_summarize_api_usage_counts_only_new_api_results():
+    first_api_result = {
+        "from_cache": False,
+        "prompt_tokens": 80,
+        "completion_tokens": 20,
+        "total_tokens": 100,
+        "processing_time_seconds": 0.25,
+    }
+    second_api_result = {
+        "from_cache": False,
+        "prompt_tokens": 60,
+        "completion_tokens": 10,
+        "total_tokens": 70,
+        "processing_time_seconds": 0.5,
+    }
+
+    results = [
+        first_api_result,  # 本轮新请求
+        {**first_api_result, "from_cache": True},
+        {**second_api_result, "from_log": True},  # from_log 表示是从日志中读取的历史结果，不计入本轮统计
+        second_api_result,
+    ]
+
+    # 比较两个字典的键和对应的值，字典中字段的书写顺序不影响结果
+    assert summarize_api_usage(results) == {
+        "api_result_count": 2,
+        "prompt_tokens": 140,
+        "completion_tokens": 30,
+        "total_tokens": 170,
+        "api_processing_time_seconds": 0.75,
+    }
+
+
+def test_summarize_api_usage_returns_zero_without_new_api_results():
+    results = [{"from_cache": True}, {"from_log": True}]
+
+    assert summarize_api_usage(results) == {
+        "api_result_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "api_processing_time_seconds": 0.0,
+    }
+
+
+# 测试当某条结果缺少必要的 Token 计数字段时，summarize_api_usage() 会抛出 ValueError 异常
+def test_summarize_api_usage_rejects_missing_token_count():
+    results = [
+        {
+            "from_cache": False,
+            "prompt_tokens": 80,
+            "total_tokens": 100,
+            "processing_time_seconds": 0.25,
+        },
+    ]
+
+    with pytest.raises(ValueError, match="completion_tokens"):
+        summarize_api_usage(results)
