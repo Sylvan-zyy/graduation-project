@@ -1,3 +1,5 @@
+import json
+
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -310,4 +312,42 @@ def test_request_correction_saves_new_result(monkeypatch):
     assert result["from_cache"] is False
     assert result["corrected_text"] == "新校正字幕"
     assert result["total_tokens"] == 110
-    assert result["processing_time_seconds"] == 0.5  
+    assert result["processing_time_seconds"] == 0.5
+
+
+# parametrize 负责每次把一组参数传给测试函数，函数每被调用一次，就从第一行开始执行，重新创建一个 data 字典
+@pytest.mark.parametrize(
+    "field, invalid_value",
+    [
+        ("corrected_text", 123),
+        ("changed", "false"),
+        ("reason", None),
+    ],
+)
+def test_parse_correction_result_rejects_invalid_field_types(field, invalid_value):
+    # 每轮都会重新执行 data = {...},因此不会影响后续轮次的测试
+    data = {
+        "corrected_text": "你好",
+        "changed": False,
+        "reason": "无需修改",
+    }
+    data[field] = invalid_value
+
+    with pytest.raises(ValueError, match=field):
+        parse_correction_result(json.dumps(data, ensure_ascii=False))
+
+
+@pytest.mark.parametrize(
+    "content, expected_message",
+    [
+        ("[]", "必须是对象"),
+        ('{"corrected_text": "你好", "changed": false}', "缺少字段.*reason"),
+        (
+            '{"corrected_text": "   ", "changed": false, "reason": "无需修改"}',
+            "corrected_text 必须是非空字符串",
+        ),
+    ],
+)
+def test_parse_correction_result_rejects_unusable_json(content, expected_message):
+    with pytest.raises(ValueError, match=expected_message):
+        parse_correction_result(content)

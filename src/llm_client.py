@@ -65,18 +65,36 @@ def parse_correction_result(
     content: str | None,
 ) -> dict[str, str | bool]:
     """解析模型返回的字幕校正 JSON。"""
-    if not content or not content.strip():
+    if not content or not content.strip():  # strip()去掉首尾空白字符
         raise ValueError("模型返回内容为空")
 
     try:
-        data = json.loads(content)
+        data = json.loads(content)  # dumps把字典变成JSON字符串，解析函数用loads把JSON字符串读回Python对象
     except json.JSONDecodeError as exc:
         raise ValueError("模型返回的内容不是有效 JSON") from exc
 
+    if not isinstance(data, dict):
+        raise ValueError("模型返回的 JSON 必须是对象")
+
+    for field in ("corrected_text", "changed", "reason"):
+        if field not in data:
+            raise ValueError(f"模型返回缺少字段：{field}")
+
+    corrected_text = data["corrected_text"]
+    changed = data["changed"]
+    reason = data["reason"]
+
+    if not isinstance(corrected_text, str) or not corrected_text.strip():
+        raise ValueError("corrected_text 必须是非空字符串")
+    if not isinstance(changed, bool):
+        raise ValueError("changed 必须是布尔值")
+    if not isinstance(reason, str):
+        raise ValueError("reason 必须是字符串")
+
     return {
-        "corrected_text": data["corrected_text"],
-        "changed": data["changed"],
-        "reason": data["reason"],
+        "corrected_text": corrected_text,
+        "changed": changed,
+        "reason": reason,
     }
 
 
