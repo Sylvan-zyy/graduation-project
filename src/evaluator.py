@@ -2,6 +2,8 @@
 """编辑距离：参考文本前 i 个字符 → 预测文本前 j 个字符，最少需要多少插入、删除、替换操作"""
 """动态规划表：二维表，记录参考前 i 个字符 → 预测前 j 个字符的最小编辑距离"""
 
+from .subtitle_io import load_srt
+
 #  私有辅助函数（下划线开头）
 def _calculate_edit_distance(
     reference_text: str,
@@ -239,4 +241,53 @@ def summarize_api_usage(
         "api_result_count": api_result_count,
         **token_totals,
         "api_processing_time_seconds": api_processing_time_seconds,
+    }
+
+
+# 评估 SRT 文件
+def evaluate_srt_files(
+    reference_path: str,
+    original_path: str,
+    corrected_path: str,
+) -> dict[str, float | None]:
+    """读取三份对齐的 SRT，并计算字幕校正的质量指标。"""
+    # load_srt() 会把 SRT 文件解析成 Subtitle 对象列表，字幕条数、编号和时间轴(start, end)必须一致
+    # 对齐检查用前三个属性，计算指标用 content
+    reference_subtitles = load_srt(reference_path)
+    original_subtitles = load_srt(original_path)
+    corrected_subtitles = load_srt(corrected_path)
+
+    # label 用于报错时指出哪一份文件有问题，每轮先检查条数,若不同则抛出异常
+    for label, subtitles in (
+        ("原始字幕", original_subtitles),
+        ("校正字幕", corrected_subtitles),
+    ):
+        if len(subtitles) != len(reference_subtitles):
+            raise ValueError(f"{label}与参考字幕的条数必须一致")
+
+        # position 是这次比较到列表里的第几条，`subtitle.index` 是 SRT 文件里写的字幕编号
+        for position, (reference, subtitle) in enumerate(
+            zip(reference_subtitles, subtitles), start=1
+        ):
+            # zip() 负责按现有顺序配对，若值相等则字幕对齐。元组比较负责验证配对是否正确
+            reference_key = (reference.index, reference.start, reference.end)
+            subtitle_key = (subtitle.index, subtitle.start, subtitle.end)
+            if subtitle_key != reference_key:
+                raise ValueError(
+                    f"{label}第 {position} 条与参考字幕的编号或时间轴不一致"
+                )
+
+    reference_texts = [subtitle.content for subtitle in reference_subtitles]
+    original_texts = [subtitle.content for subtitle in original_subtitles]
+    corrected_texts = [subtitle.content for subtitle in corrected_subtitles]
+
+    return {
+        "original_cer": calculate_corpus_cer(reference_texts, original_texts),
+        "corrected_cer": calculate_corpus_cer(reference_texts, corrected_texts),
+        "correct_modification_rate": calculate_correct_modification_rate(
+            reference_texts, original_texts, corrected_texts
+        ),
+        "overcorrection_rate": calculate_overcorrection_rate(
+            reference_texts, original_texts, corrected_texts
+        ),
     }

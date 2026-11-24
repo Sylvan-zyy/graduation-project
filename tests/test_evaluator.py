@@ -6,6 +6,7 @@ from src.evaluator import (
     calculate_correct_modification_rate,
     calculate_overcorrection_rate,
     summarize_api_usage,
+    evaluate_srt_files,
 )
 
 def test_calculate_cer_with_identical_text():
@@ -253,3 +254,67 @@ def test_summarize_api_usage_rejects_missing_token_count():
 
     with pytest.raises(ValueError, match="completion_tokens"):
         summarize_api_usage(results)
+
+# 把前面写的几个评估指标接到了 SRT 文件入口上，校验CER、正确修改率和过度修改率的计算结果是否符合预期
+def test_evaluate_srt_files_compares_original_and_corrected_subtitles(tmp_path):  # tmp_path 是 pytest 自动提供的临时目录
+    template = (
+        "1\n00:00:00,000 --> 00:00:01,000\n{first}\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\n{second}\n\n"
+        "3\n00:00:02,000 --> 00:00:03,000\n{third}\n\n"
+    )
+    reference_path = tmp_path / "reference.srt"  # / 用于拼接路径
+    original_path = tmp_path / "original.srt"
+    corrected_path = tmp_path / "corrected.srt"
+
+    for path, texts in [
+        (reference_path, ("你好", "再见", "早上好")),
+        (original_path, ("你号", "再件", "早上好")),
+        (corrected_path, ("你好", "再见", "早上号")),
+    ]:
+        first, second, third = texts
+        path.write_text(
+            template.format(first=first, second=second, third=third),  # 把模板字符串里的 {first}、{second}、{third} 替换成实际文本
+            encoding="utf-8",
+        )
+
+    result = evaluate_srt_files(
+        reference_path=str(reference_path),
+        original_path=str(original_path),
+        corrected_path=str(corrected_path),
+    )
+
+    assert result == pytest.approx({
+        "original_cer": 2 / 7,
+        "corrected_cer": 1 / 7,
+        "correct_modification_rate": 2 / 3,
+        "overcorrection_rate": 1.0,
+    })
+
+
+# @pytest.mark.parametrize把一个测试函数自动展开成多组用例，每组用不同的参数运行
+@pytest.mark.parametrize(
+    "number, end_time",
+    [
+        (2, "00:00:01,000"),
+        (1, "00:00:02,000"),
+    ],
+)
+def test_evaluate_srt_files_rejects_unaligned_subtitles(tmp_path, number, end_time):
+    reference_path = tmp_path / "reference.srt"
+    original_path = tmp_path / "original.srt"
+    corrected_path = tmp_path / "corrected.srt"
+
+    matching_entry = "1\n00:00:00,000 --> 00:00:01,000\n你好\n\n"
+    reference_path.write_text(matching_entry, encoding="utf-8")
+    original_path.write_text(matching_entry, encoding="utf-8")
+    corrected_path.write_text(
+        f"{number}\n00:00:00,000 --> {end_time}\n你好\n\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="编号或时间轴不一致"):
+        evaluate_srt_files(
+            reference_path=str(reference_path),
+            original_path=str(original_path),
+            corrected_path=str(corrected_path),
+        )
