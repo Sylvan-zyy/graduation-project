@@ -39,13 +39,16 @@ def correct_single_subtitle(
     )
 
     original_text = subtitles[current_index].content
+    corrected_text = original_text if result.get("failed") else result["corrected_text"]
+
     return {
         "subtitle_index": subtitles[current_index].index,
         "original_text": original_text,
         "window_size": window_size,
         "prompt_type": prompt_type,
         **result,
-        "changed": result["corrected_text"] != original_text,  # 字典里同名字段以后写入的值为准
+        "corrected_text": corrected_text,
+        "changed": corrected_text != original_text,
     }
 
 
@@ -95,10 +98,11 @@ def correct_all_subtitles(
         corrected_subtitles[current_index].content = corrected_text
         results.append(result)
 
-        # 只记录本次新完成的字幕，不会把历史结果重复追加到日志中
+        # 只有当 log_path 不为 None 且当前字幕编号不在 completed_results 中，才会把本次结果追加到日志中
         if (
             log_path is not None
             and subtitle_index not in completed_results
+            and not result.get("failed")
         ):
             append_result_log(
                 result=result,

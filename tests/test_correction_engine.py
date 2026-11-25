@@ -1,6 +1,10 @@
 import pytest
 
+from src.evaluator import summarize_api_usage
+from src.result_logger import load_completed_results
+
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from srt import Subtitle
@@ -343,3 +347,45 @@ def test_correct_single_subtitle_derives_changed_from_text(
         result = correct_single_subtitle(subtitles, current_index=0)
 
     assert result["changed"] is expected_changed
+
+
+def test_correct_all_subtitles_continues_after_invalid_model_response(tmp_path):
+    log_path = str(tmp_path / "correction.jsonl")
+    subtitles = [
+        Subtitle(1, timedelta(seconds=0), timedelta(seconds=1), "第一句原闻"),
+        Subtitle(2, timedelta(seconds=1), timedelta(seconds=2), "第二句原闻"),
+    ]
+    usage = SimpleNamespace(  # SimpleNamespace用关键字参数直接生成带属性可修改的动态对象
+        prompt_tokens=80,
+        completion_tokens=20,
+        total_tokens=100,
+    )
+    contents = [
+        "[]",
+        '{"corrected_text": "第二句原文", "changed": true, "reason": "修正错字"}',
+    ]
+    responses = [  # responses列表推导式每轮从 contents 取一个字符串，用 SimpleNamespace 包装成模拟 API 响应
+        SimpleNamespace(  # 用嵌套的 SimpleNamespace 逐层构造出一个具有 choices 和 usage 属性的对象
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content))],  # 每一层只负责“挂一个属性”，最外层才是最终加入列表的对象
+            usage=usage,
+        )
+        for content in contents
+    ]
+
+    with patch(
+        "src.llm_client.request_json_completion",
+        side_effect=responses,  # side_effect 是Mock构造参数，patch会把它传给内部创建的 mock，让Mock模拟对象在每次调用时返回 responses 列表中的下一个元素
+    ):
+        corrected_subtitles, results = correct_all_subtitles(
+            subtitles, log_path=log_path
+        )
+
+    # 列表推导式，遍历 corrected_subtitles 中的每个 Subtitle 对象，取 .content 属性，组成一个新列表
+    assert [subtitle.content for subtitle in corrected_subtitles] == [
+        "第一句原闻",
+        "第二句原文",
+    ]
+    assert results[0]["failed"] is True
+    assert results[0]["changed"] is False
+    assert summarize_api_usage(results)["total_tokens"] == 200
+    assert set(load_completed_results(log_path)) == {2}

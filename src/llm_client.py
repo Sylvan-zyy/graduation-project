@@ -132,18 +132,26 @@ def request_correction(
     )
 
     processing_time = time.perf_counter() - start_time
-    content = response.choices[0].message.content
-    correction = parse_correction_result(content)
+    content = response.choices[0].message.content if response.choices else None
     usage = response.usage
 
-    result = {
-    **correction,
-    "prompt_tokens": usage.prompt_tokens,
-    "completion_tokens": usage.completion_tokens,
-    "total_tokens": usage.total_tokens,
-    "processing_time_seconds": processing_time,
-    "from_cache": False,  # False表示来自 API，True表示来自缓存
-}
+    result: dict[str, str | bool | int | float] = {
+        "processing_time_seconds": processing_time,
+        "from_cache": False,
+    }
+    if usage is not None:
+        result.update(
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+        )
+
+    try:
+        correction = parse_correction_result(content)
+    except ValueError as error:
+        return {**result, "failed": True, "reason": str(error)}
+
+    result.update(correction)
 
     if cache_path is not None and cache_key is not None:
         cache[cache_key] = result
