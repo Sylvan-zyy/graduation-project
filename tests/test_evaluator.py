@@ -222,6 +222,7 @@ def test_summarize_api_usage_counts_only_new_api_results():
     # 比较两个字典的键和对应的值，字典中字段的书写顺序不影响结果
     assert summarize_api_usage(results) == {
         "api_result_count": 2,
+        "unknown_usage_count": 0,
         "prompt_tokens": 140,
         "completion_tokens": 30,
         "total_tokens": 170,
@@ -234,6 +235,7 @@ def test_summarize_api_usage_returns_zero_without_new_api_results():
 
     assert summarize_api_usage(results) == {
         "api_result_count": 0,
+        "unknown_usage_count": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
@@ -318,3 +320,30 @@ def test_evaluate_srt_files_rejects_unaligned_subtitles(tmp_path, number, end_ti
             original_path=str(original_path),
             corrected_path=str(corrected_path),
         )
+
+
+def test_summarize_api_usage_counts_unknown_usage_separately():
+    results = [
+        {
+            "from_cache": False,
+            "prompt_tokens": 80,
+            "completion_tokens": 20,
+            "total_tokens": 100,
+            "processing_time_seconds": 0.25,
+        },
+        {
+            "from_cache": False,
+            "failed": True,
+            "usage_unknown": True,
+            "processing_time_seconds": 0.5,
+        },
+    ]
+
+    assert summarize_api_usage(results) == {
+        "api_result_count": 2,
+        "unknown_usage_count": 1,
+        "prompt_tokens": 80,
+        "completion_tokens": 20,
+        "total_tokens": 100,
+        "api_processing_time_seconds": 0.75,
+    }

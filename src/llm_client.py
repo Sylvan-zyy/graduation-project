@@ -5,6 +5,8 @@ from openai import APITimeoutError, OpenAI, OpenAIError
 
 from .cache_manager import build_cache_key, load_cache, save_cache
 
+class DeepSeekTimeoutError(RuntimeError):
+    """DeepSeek 请求超时。"""
 
 def load_deepseek_config() -> dict[str, str]:
     """从 .env 文件中读取 DeepSeek API 配置。"""
@@ -56,7 +58,7 @@ def request_json_completion(system_prompt: str, user_prompt: str):
         extra_body={"thinking": {"type": "disabled"}},
     )
     except APITimeoutError as exc:
-        raise RuntimeError("DeepSeek API 请求超时") from exc
+        raise DeepSeekTimeoutError("DeepSeek API 请求超时") from exc
     except OpenAIError as exc:
         raise RuntimeError("DeepSeek API 请求失败") from exc
     
@@ -126,10 +128,19 @@ def request_correction(
         
     start_time = time.perf_counter()
 
-    response = request_json_completion(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-    )
+    try:
+        response = request_json_completion(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+    except DeepSeekTimeoutError as error:
+        return {
+            "failed": True,
+            "reason": str(error),
+            "usage_unknown": True,
+            "processing_time_seconds": time.perf_counter() - start_time,
+            "from_cache": False,
+        }
 
     processing_time = time.perf_counter() - start_time
     content = response.choices[0].message.content if response.choices else None

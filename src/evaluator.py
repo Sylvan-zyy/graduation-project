@@ -201,21 +201,36 @@ def calculate_overcorrection_rate(
     return overcorrected_count / originally_correct_count
 
 
-# 接收本轮 correct_srt_file() 返回的结果列表，先跳过缓存和日志记录，再累加新请求的用量。
 def summarize_api_usage(
     results: list[dict[str, str | bool | int | float]],
 ) -> dict[str, int | float]:
-    """汇总本轮校正结果中新 API 请求的用量与耗时。"""
+    """汇总本轮请求的耗时、已知 Token 和用量未知的次数。"""
     token_totals = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
     }
     api_result_count = 0
+    unknown_usage_count = 0
     api_processing_time_seconds = 0.0
 
     for result in results:
-        if result.get("from_log") or result.get("from_cache"):  # or 从左到右判断
+        if result.get("from_log") or result.get("from_cache"):
+            continue
+
+        seconds = result.get("processing_time_seconds")
+        if (
+            isinstance(seconds, bool)
+            or not isinstance(seconds, (int, float))
+            or seconds < 0
+        ):
+            raise ValueError("processing_time_seconds 必须是非负数")
+
+        api_result_count += 1
+        api_processing_time_seconds += seconds
+
+        if result.get("usage_unknown") is True:
+            unknown_usage_count += 1
             continue
 
         for field in token_totals:
@@ -224,21 +239,9 @@ def summarize_api_usage(
                 raise ValueError(f"{field} 必须是非负整数")
             token_totals[field] += tokens
 
-        seconds = result.get("processing_time_seconds")  # 校验处理耗时，再把请求次数加1
-        if (
-            isinstance(seconds, bool)
-            or not isinstance(seconds, (int, float))
-            or seconds < 0
-        ):
-            raise ValueError("processing_time_seconds 必须是非负数")
-
-        # 结果通过三项 Token 的校验和累加，再通过耗时校验后，就会把它计为本轮的一次 API 请求。
-        # 来自缓存或日志的结果会提前执行 continue
-        api_result_count += 1  # 在外层循环内、内层循环外
-        api_processing_time_seconds += seconds
-
     return {
         "api_result_count": api_result_count,
+        "unknown_usage_count": unknown_usage_count,
         **token_totals,
         "api_processing_time_seconds": api_processing_time_seconds,
     }

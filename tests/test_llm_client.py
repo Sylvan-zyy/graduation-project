@@ -351,3 +351,27 @@ def test_parse_correction_result_rejects_invalid_field_types(field, invalid_valu
 def test_parse_correction_result_rejects_unusable_json(content, expected_message):
     with pytest.raises(ValueError, match=expected_message):
         parse_correction_result(content)
+
+
+def test_request_correction_marks_usage_unknown_after_timeout():
+    with (
+        patch(
+            "src.llm_client.load_deepseek_config",
+            return_value={"model": "test-model"},
+        ),
+        patch("src.llm_client.create_deepseek_client") as mock_create_client,
+    ):
+        mock_client = mock_create_client.return_value
+        mock_client.chat.completions.create.side_effect = APITimeoutError(
+            request=Mock()
+        )
+
+        result = request_correction(
+            system_prompt="请返回 JSON",
+            user_prompt="测试字幕",
+        )
+
+    assert result["failed"] is True
+    assert result["reason"] == "DeepSeek API 请求超时"
+    assert result["usage_unknown"] is True
+    assert "total_tokens" not in result
