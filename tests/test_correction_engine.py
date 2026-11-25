@@ -1,3 +1,5 @@
+import pytest
+
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -309,3 +311,35 @@ def test_correct_srt_file():
         file_path="output.srt",
     )
     assert results == mock_results
+
+
+@pytest.mark.parametrize(
+    "corrected_text, model_changed, expected_changed",
+    [
+        ("我们出去散步", False, True),
+        ("我们出去散不", True, False),
+    ],
+)
+def test_correct_single_subtitle_derives_changed_from_text(
+    corrected_text, model_changed, expected_changed
+):
+    subtitles = [
+        Subtitle(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=2),
+            content="我们出去散不",
+        ),
+    ]
+
+    with patch(
+        "src.correction_engine.request_correction",
+        return_value={
+            "corrected_text": corrected_text,
+            "changed": model_changed,
+            "reason": "模拟模型响应",
+        },
+    ):
+        result = correct_single_subtitle(subtitles, current_index=0)
+
+    assert result["changed"] is expected_changed

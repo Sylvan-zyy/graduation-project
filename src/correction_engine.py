@@ -38,13 +38,15 @@ def correct_single_subtitle(
         cache_path=cache_path,
     )
 
+    original_text = subtitles[current_index].content
     return {
-    "subtitle_index": subtitles[current_index].index,
-    "original_text": context["current"],
-    "window_size": window_size,
-    "prompt_type": prompt_type,
-    **result,
-}
+        "subtitle_index": subtitles[current_index].index,
+        "original_text": original_text,
+        "window_size": window_size,
+        "prompt_type": prompt_type,
+        **result,
+        "changed": result["corrected_text"] != original_text,  # 字典里同名字段以后写入的值为准
+    }
 
 
 def correct_all_subtitles(
