@@ -22,5 +22,5 @@ def save_srt(subtitles: list[srt.Subtitle], file_path: str) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    content = srt.compose(subtitles)
+    content = srt.compose(subtitles, reindex=False)  # reindex=False 保留原始字幕编号，关闭自动重编号
     path.write_text(content, encoding="utf-8")

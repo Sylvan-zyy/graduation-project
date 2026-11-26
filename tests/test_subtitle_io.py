@@ -1,3 +1,4 @@
+from srt import Subtitle
 from datetime import timedelta
 
 from src.subtitle_io import load_srt, save_srt
@@ -27,3 +28,16 @@ def test_save_and_reload_srt(tmp_path) -> None:
     assert reloaded_subtitles[2].content == "回来以后继续学习派森编程。"
     assert reloaded_subtitles[2].start == timedelta(seconds=8.5)
     assert reloaded_subtitles[2].end == timedelta(seconds=12)
+
+
+def test_save_srt_preserves_subtitle_numbers(tmp_path):
+    subtitles = [
+        Subtitle(4, timedelta(seconds=0), timedelta(seconds=1), "你好"),  # 字幕编号从 4 开始
+        Subtitle(9, timedelta(seconds=1), timedelta(seconds=2), "再见"),
+    ]
+    output_path = str(tmp_path / "numbering.srt")  # str()把路径转成字符串
+
+    save_srt(subtitles, output_path)
+    reloaded = load_srt(output_path)
+
+    assert [subtitle.index for subtitle in reloaded] == [4, 9]
